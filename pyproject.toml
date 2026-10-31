@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tracecheck"
+version = "0.1.0"
+description = "Deterministic assertions over agent traces: unit tests for agent behavior, no LLM judge."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Gang Ji" }]
+keywords = ["llm", "agents", "testing", "evaluation", "traces", "assertions"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Testing",
+]
+dependencies = []
+
+[project.scripts]
+tracecheck = "tracecheck.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/gangjig/tracecheck"
+Repository = "https://github.com/gangjig/tracecheck"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+tracecheck = ["data/*.json", "data/*.jsonl"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

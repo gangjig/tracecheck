@@ -1,0 +1,1 @@
+[{"after":"edit_file","before":"search","type":"order"},{"needs":"verify","tool":"final","type":"requires"},{"type":"no_repeat"},{"count":3,"tool":"search","type":"max_calls"},{"tool":"shell","type":"forbidden"},{"count":1,"tool":"run_tests","type":"min_calls"}]
