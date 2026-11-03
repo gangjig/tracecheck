@@ -53,14 +53,18 @@ One event per JSONL line, in execution order; steps are line numbers:
 ```
 
 Event types are `call` and `result` (both carry `tool`; calls carry
-optional `args`), `message`, and `final`. This is the least common
-denominator of agent logging — any harness that can log what it did
-can emit it, and tracecheck never needs to know which framework
-produced the run.
+optional `args`), `blocked`, `message`, and `final`. A `blocked`
+event records a call the harness *refused* — a guardrail or policy
+stopped it before it ran. It is not a call and counts toward no call
+rule; it exists so "the agent tried and was stopped" is
+distinguishable from "the agent never tried". This is the least
+common denominator of agent logging — any harness that can log what
+it did can emit it, and tracecheck never needs to know which
+framework produced the run.
 
 ## Rules
 
-A rules file is a JSON list. Seven rule types cover the failure
+A rules file is a JSON list. Eight rule types cover the failure
 modes that actually recur in agent runs:
 
 | Rule | Example | Catches |
@@ -72,12 +76,46 @@ modes that actually recur in agent runs:
 | `min_calls` | `{"tool": "run_tests", "count": 1}` | skipped verification steps |
 | `no_repeat` | `{"tool": "edit_file"}` (tool optional) | the loop signature: the identical call issued again right after itself |
 | `max_events` | `{"count": 50}` | whole-trace step budgets |
+| `min_blocked` | `{"tool": "shell", "count": 1}` | denials missing from the record — separates "never tried" from "tried, blocked, and logged" |
 
 Semantics are documented per rule in the module and are strict about
 vacuous cases: `order` passes if the `after` tool is never called,
 and `requires` passes if its target never occurs — a rule constrains
 what happens *when* the agent acts, and `min_calls` is the tool for
 forcing an action to happen at all.
+
+## Trace integrity: hash chains
+
+Rules are only as good as the trace they run on. If whatever wrote
+the file can also edit it, a denied call can be re-labelled a
+success — or deleted — and every rule still passes. `seal` and
+`verify` add tamper evidence:
+
+```bash
+tracecheck seal run.jsonl            # writes run.sealed.jsonl, prints an anchor hash
+tracecheck verify run.sealed.jsonl --anchor <hash>
+tracecheck check run.sealed.jsonl --rules rules.json --require-chain
+```
+
+Sealing appends a `chain` field to every event:
+`chain[n] = sha256(chain[n-1] + canonical(event[n]))`. Editing an
+event, deleting one, or reordering two breaks the chain at exactly
+that step, and `verify` names it (exit 1; `check --require-chain`
+fails the same way before any rule runs). Two honest limits:
+
+- **A chain proves the prefix, not the tail.** Chopping the last
+  events off leaves a shorter chain that still verifies — that is
+  what the anchor is for. Record the anchor somewhere the agent
+  cannot reach at the end of the run; `--anchor` then catches
+  truncation too.
+- **Sealing is not storage.** The harness should append events in
+  real time and keep the file (and the anchor) outside the
+  monitored agent's reach; tracecheck verifies what you hand it, it
+  cannot store anything for you. This is the checkable half of the
+  NIST / NSA / CISA guidance on incident readiness for autonomous
+  agents (Oct 2026), which also asks for exactly the `blocked`
+  records above: monitoring the agent cannot alter, denials
+  included.
 
 ## Recreate this project from a prompt
 
@@ -104,7 +142,21 @@ forcing an action to happen at all.
 > agent repeats an identical edit and finishes without verifying, so
 > exactly 2 of 6 rules fail. Standard library only, with a pytest
 > suite covering trace validation, every rule type passing and
-> failing, report rendering, and the exit-code contract.
+> failing, report rendering, and the exit-code contract. Then
+> extend it: add a fifth event type, blocked, for tool calls the
+> harness refused before they ran (requires tool, optional args and
+> a reason in text; never counted as a call), plus a min_blocked
+> rule asserting at least N blocked events for a tool are on record.
+> Add tamper evidence for trace files: a seal subcommand that
+> appends a sha256 hash chain (each event's hash commits to the
+> previous hash plus the canonical JSON of the event — sorted keys,
+> compact separators), a verify subcommand that recomputes the
+> chain and names the first broken step, an --anchor option that
+> compares the final hash against one recorded out of band to catch
+> tail truncation, a check --require-chain flag that fails before
+> rules run, and re-sealing refused — all under the same 0/1/2
+> exit-code contract, with tests for edit, deletion, reordering and
+> truncation tamper modes.
 
 ## Limitations
 
@@ -115,7 +167,9 @@ forcing an action to happen at all.
   that at least behaved structurally.
 - **The trace must be honest.** Garbage-in applies: if the harness
   doesn't log a call, no rule can see it. Emit traces from the tool
-  dispatch layer, not from the model's self-report.
+  dispatch layer, not from the model's self-report. Hash-chain
+  sealing (above) covers the other half of honesty: a trace that
+  was complete when written but edited afterwards.
 - **Exact args equality for `no_repeat`.** A loop that mutates one
   character per retry evades it; pair it with `max_calls` for a hard
   ceiling.
@@ -125,7 +179,7 @@ forcing an action to happen at all.
 ```bash
 python -m venv .venv && source .venv/bin/activate
 pip install -e . pytest
-python -m pytest        # 15 tests, fully offline
+python -m pytest        # 30 tests, fully offline
 ```
 
 ## License

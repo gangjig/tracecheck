@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tracecheck"
-version = "0.1.0"
+version = "0.2.0"
 description = "Deterministic assertions over agent traces: unit tests for agent behavior, no LLM judge."
 readme = "README.md"
 requires-python = ">=3.10"

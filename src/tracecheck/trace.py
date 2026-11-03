@@ -6,6 +6,7 @@ line in the file:
 
     {"event": "call",    "tool": "search", "args": {"query": "auth bug"}}
     {"event": "result",  "tool": "search"}
+    {"event": "blocked", "tool": "shell", "args": {"command": "curl ..."}}
     {"event": "message", "text": "Found it in auth.py."}
     {"event": "call",    "tool": "edit_file", "args": {"path": "auth.py"}}
     {"event": "final",   "text": "Fixed."}
@@ -15,6 +16,14 @@ Event types:
 * `call`    -- the agent invoked a tool (requires `tool`; `args` an
                optional object).
 * `result`  -- a tool returned (requires `tool`).
+* `blocked` -- the harness refused a tool call — a guardrail or
+               policy stopped it before it ran (requires `tool`;
+               `args` an optional object; `text` can carry the
+               reason). A blocked call is *not* a call: it never
+               executed, so it counts toward no `call` rule. It
+               exists so that "the agent tried and was stopped" is
+               distinguishable from "the agent never tried" — the
+               difference an incident review lives on.
 * `message` -- the agent said something (`text` optional).
 * `final`   -- the agent finished (at most the semantics you give it;
                rules can require things *before* the final event).
@@ -33,7 +42,7 @@ from typing import Optional, Union
 
 PathLike = Union[str, Path]
 
-EVENT_TYPES = ("call", "result", "message", "final")
+EVENT_TYPES = ("call", "result", "blocked", "message", "final")
 
 
 @dataclass(frozen=True)
@@ -55,7 +64,7 @@ class Event:
                 f"got {event!r}"
             )
         tool = data.get("tool")
-        if event in ("call", "result") and not tool:
+        if event in ("call", "result", "blocked") and not tool:
             raise ValueError(f"{where}: {event!r} events require 'tool'")
         args = data.get("args", {})
         if not isinstance(args, dict):
@@ -79,6 +88,13 @@ class Trace:
 
     def calls_to(self, tool: str) -> list[Event]:
         return [e for e in self.calls if e.tool == tool]
+
+    @property
+    def blocked(self) -> list[Event]:
+        return [e for e in self.events if e.event == "blocked"]
+
+    def blocked_to(self, tool: str) -> list[Event]:
+        return [e for e in self.blocked if e.tool == tool]
 
     @property
     def final_event(self) -> Optional[Event]:

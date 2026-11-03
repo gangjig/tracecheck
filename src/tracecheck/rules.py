@@ -26,6 +26,13 @@ Rule types (all operate on `call` events unless noted):
   a call that already failed to move it forward.
 * `max_events` {"count": 50}
   The whole trace (all event types) stays within a step budget.
+* `min_blocked` {"tool": "shell", "count": 1}
+  At least `count` `blocked` events for the tool: the harness's
+  refusals are on record. This is the rule that separates "the agent
+  never tried" from "the agent tried, was stopped, and the stop was
+  logged" — without it, a trace with no blocked events is ambiguous
+  between a well-behaved agent and a harness that doesn't record
+  denials at all.
 """
 
 from __future__ import annotations
@@ -48,6 +55,7 @@ RULE_TYPES = (
     "min_calls",
     "no_repeat",
     "max_events",
+    "min_blocked",
 )
 
 
@@ -92,7 +100,7 @@ class Rule:
                         raise ValueError(
                             f"{where}: invalid regex for arg {key!r}: {exc}"
                         ) from exc
-        elif rule_type in ("max_calls", "min_calls"):
+        elif rule_type in ("max_calls", "min_calls", "min_blocked"):
             need("tool")
             need("count")
             if not isinstance(data["count"], int) or data["count"] < 0:
@@ -118,6 +126,8 @@ class Rule:
             return f"{raw['tool']} at most {raw['count']} call(s)"
         if self.type == "min_calls":
             return f"{raw['tool']} at least {raw['count']} call(s)"
+        if self.type == "min_blocked":
+            return f"{raw['tool']} blocked at least {raw['count']} time(s), on record"
         if self.type == "no_repeat":
             tool = raw.get("tool")
             return f"no repeated identical {tool} call" if tool else "no repeated identical call (any tool)"
@@ -261,6 +271,19 @@ def _check_max_events(trace: Trace, rule: Rule) -> Result:
     return Result(rule, False, f"{actual} event(s), limit {count}")
 
 
+def _check_min_blocked(trace: Trace, rule: Rule) -> Result:
+    tool, count = rule.raw["tool"], rule.raw["count"]
+    actual = len(trace.blocked_to(tool))
+    if actual >= count:
+        return Result(rule, True, f"{tool} blocked {actual} time(s), minimum {count}")
+    return Result(
+        rule,
+        False,
+        f"{tool} blocked {actual} time(s), minimum {count} — denials are "
+        "missing from the record, or the harness does not log them",
+    )
+
+
 _CHECKERS: dict[str, Callable[[Trace, Rule], Result]] = {
     "order": _check_order,
     "requires": _check_requires,
@@ -269,6 +292,7 @@ _CHECKERS: dict[str, Callable[[Trace, Rule], Result]] = {
     "min_calls": _check_min_calls,
     "no_repeat": _check_no_repeat,
     "max_events": _check_max_events,
+    "min_blocked": _check_min_blocked,
 }
 
 
