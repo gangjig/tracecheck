@@ -81,30 +81,20 @@ forcing an action to happen at all.
 
 ## Recreate this project from a prompt
 
-> Build a Python CLI called `tracecheck` that checks agent execution
-> traces against deterministic rules — no LLM judge. A trace is a
-> JSONL file with one event per line in execution order (steps are
-> 1-based line numbers); event types are call/result (with a tool
-> name, calls with an optional args object), message, and final, with
-> strict validation errors that cite the line. A rules file is a JSON
-> list supporting seven rule types: order (first after-call must be
-> preceded by a before-call), requires (first call to a tool — or the
-> final event when the tool is "final" — must be preceded by a needs
-> call), forbidden (a tool never called, optionally narrowed by
-> per-argument regex matching), max_calls and min_calls per tool,
-> no_repeat (no two back-to-back calls to the same tool with
-> identical args), and max_events for whole-trace budgets; document
-> the vacuous-pass semantics. Evaluation is a pure function from
-> trace + rules to per-rule pass/fail results whose messages cite
-> exact step numbers. Render Markdown and JSON reports with a trace
-> summary (event count, per-tool call counts, whether a final event
-> exists). The CLI has a check subcommand with exit codes 0 (all
-> pass), 1 (a rule failed) and 2 (unreadable input), plus a demo
-> subcommand that bundles a sample trace and rules where a coding
-> agent repeats an identical edit and finishes without verifying, so
-> exactly 2 of 6 rules fail. Standard library only, with a pytest
-> suite covering trace validation, every rule type passing and
-> failing, report rendering, and the exit-code contract.
+> Write a small Python command-line tool, standard library only, that
+> checks recorded agent execution traces against deterministic rules,
+> with no LLM judge. A trace is a JSONL file of events in execution
+> order (tool calls and their results, messages, and a final event),
+> validated strictly with errors that cite the offending line; rules are
+> declared in a JSON file and cover ordering and prerequisites between
+> calls, forbidden tools optionally narrowed by argument patterns, per-
+> tool call-count limits, back-to-back identical repeats, and whole-
+> trace event budgets. Checking is a pure evaluation that returns a pass
+> or fail per rule with messages citing exact step numbers, rendered as
+> a Markdown or JSON report with a trace summary, under a clear exit-
+> code contract for CI. Include a demo with a bundled trace and rule set
+> where a coding agent repeats an identical edit and finishes without
+> verifying, so the failures are visible in the report.
 
 ## Limitations
 
